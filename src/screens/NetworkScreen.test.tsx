@@ -136,8 +136,6 @@ describe("NetworkScreen", () => {
     // Render both with a polling interval
     const { FeeEstimator } = await import("@/components/FeeEstimator");
     const { GasOptimizer } = await import("@/components/GasOptimizer");
-    const { getClient } = await import("@/lib/client");
-    
     // We need to mock the client properly to test this
     const estimateFee = vi.fn().mockResolvedValue({ data: { baseFee: "100", recommended: "200" } });
     vi.mocked(useSorokit).mockReturnValue({
@@ -151,7 +149,7 @@ describe("NetworkScreen", () => {
           getGasPrice: vi.fn().mockResolvedValue({ data: {} }),
         }
       },
-    } as any);
+    } as unknown as ReturnType<typeof useSorokit>);
 
     render(
       <div>

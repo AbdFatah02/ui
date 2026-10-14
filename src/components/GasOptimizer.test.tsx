@@ -766,6 +766,7 @@ describe("GasOptimizer", () => {
       
       expect(getGasPrice.mock.calls.length).toBeGreaterThan(count1);
       
+      unmount();
       vi.useRealTimers();
       vi.unstubAllGlobals();
     });

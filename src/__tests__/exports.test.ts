@@ -9,7 +9,8 @@ describe("Public exports surface", () => {
     expect(exports.SwapRoute).toBeDefined();
     expect(exports.AllocationInput).toBeDefined();
     expect(exports.StakingDashboard).toBeDefined();
-describe('Public exports surface', () => {
+  });
+
   it('exposes all public component exports', () => {
     expect(exports.FeeEstimator).toBeTypeOf('function');
     expect(exports.AddressDisplay).toBeTypeOf('function');

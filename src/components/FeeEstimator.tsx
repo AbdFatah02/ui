@@ -40,9 +40,6 @@ export function FeeEstimator({
 }: FeeEstimatorProps) {
   const { registerWatcher } = useSorokit();
   const [containerRef, isVisible] = useIsVisible<HTMLDivElement>();
-  const [fee, setFee] = useState<FeeData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [internalCustomFee, setInternalCustomFee] = useState(
     customFeeProp ?? "",
   );
@@ -91,21 +88,17 @@ export function FeeEstimator({
 
   // Issue #442: generation counter - an estimate that resolves after a newer
   const {
-    fee: hookFee,
-    loading: hookLoading,
-    error: hookError,
+    fee,
+    loading,
+    error,
     load: hookLoad,
   } = useFeeData(refreshInterval, isVisible);
 
   useEffect(() => {
-    if (hookFee) {
-      setFee(hookFee);
-      setError(null);
-      onFeeLoadRef.current?.(hookFee);
+    if (fee) {
+      onFeeLoadRef.current?.(fee);
     }
-    setLoading(hookLoading);
-    if (hookError) setError(hookError);
-  }, [hookFee, hookLoading, hookError]);
+  }, [fee]);
 
   const load = useCallback(async () => {
     await hookLoad();

@@ -165,7 +165,7 @@ export function WalletConnectModal({
     onClose();
   }
 
-  function handleSelectWallet(wallet: WalletOption) {
+  const handleSelectWallet = useCallback((wallet: WalletOption) => {
     setSelectedWallet(wallet);
     if (isMobile && wallet.deepLink) {
       if (typeof window !== "undefined") {
@@ -175,7 +175,7 @@ export function WalletConnectModal({
     }
     setStep("connecting");
     void connectWallet();
-  }
+  }, [isMobile, connectWallet]);
 
   function handleRetry() {
     clearError();
@@ -195,7 +195,7 @@ export function WalletConnectModal({
       e.preventDefault();
       handleSelectWallet(walletOptions[focusedIndex]);
     }
-  }, [step, walletOptions, focusedIndex]);
+  }, [step, walletOptions, focusedIndex, handleSelectWallet]);
 
   // Focus the button when focusedIndex changes
   useEffect(() => {

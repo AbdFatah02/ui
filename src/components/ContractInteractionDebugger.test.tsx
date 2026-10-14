@@ -92,7 +92,7 @@ describe("ContractInteractionDebugger", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /show debugger/i }));
 
-    expect(screen.queryByText(/\u001b/)).not.toBeInTheDocument();
+    expect(screen.queryByText((content) => typeof content === "string" && content.includes("\u001b"))).not.toBeInTheDocument();
     expect(screen.getAllByText(/ERROR/).length).toBeGreaterThan(0);
   });
 

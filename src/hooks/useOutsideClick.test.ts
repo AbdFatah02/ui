@@ -10,7 +10,7 @@ describe("useOutsideClick", () => {
     
     // Create a mock element and assign it to the ref
     const element = document.createElement("div");
-    result.current.current = element as any;
+    result.current.current = element;
     
     // Fire click on document body
     fireEvent.mouseDown(document.body);
@@ -22,7 +22,7 @@ describe("useOutsideClick", () => {
     const { result } = renderHook(() => useOutsideClick(handler));
     
     const element = document.createElement("div");
-    result.current.current = element as any;
+    result.current.current = element;
     
     // Fire click on the element itself
     fireEvent.mouseDown(element);
@@ -34,7 +34,7 @@ describe("useOutsideClick", () => {
     const { result } = renderHook(() => useOutsideClick(handler, false));
     
     const element = document.createElement("div");
-    result.current.current = element as any;
+    result.current.current = element;
     
     fireEvent.mouseDown(document.body);
     expect(handler).not.toHaveBeenCalled();
@@ -45,7 +45,7 @@ describe("useOutsideClick", () => {
     const { result, unmount } = renderHook(() => useOutsideClick(handler));
     
     const element = document.createElement("div");
-    result.current.current = element as any;
+    result.current.current = element;
     
     unmount();
     
