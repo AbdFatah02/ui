@@ -214,20 +214,6 @@ export function BalanceList({
     [balances],
   );
 
-  // Issue #665: format the fiat-equivalent total in the requested currency.
-  const fiatTotal = useMemo(() => {
-    if (typeof xlmPrice !== "number" || currency === "XLM") return null;
-    try {
-      return new Intl.NumberFormat(undefined, {
-        style: "currency",
-        currency,
-        maximumFractionDigits: 2,
-      }).format(xlmTotal * xlmPrice);
-    } catch {
-      return null;
-    }
-  }, [currency, xlmPrice, xlmTotal]);
-
   const cycleSort = () => {
     setSortMode((m) =>
       m === "default"
@@ -246,10 +232,7 @@ export function BalanceList({
           <p className="text-[12px] text-ink-3 mt-0.5">Token balances</p>
           {showTotal && isConnected && !isLoadingAccount && (
             <p className="text-[11px] text-ink-3 mt-0.5">
-              ~
-              {xlmTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}{" "}
-              XLM
-              {fiatTotal ? ` (${fiatTotal})` : ""}
+              ~{xlmTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })} XLM
               {typeof xlmPrice === "number"
                 ? ` (~${CURRENCY_SYMBOLS[currency] ?? `${currency} `}${(xlmTotal * xlmPrice).toLocaleString(undefined, { maximumFractionDigits: 2 })})`
                 : ""}

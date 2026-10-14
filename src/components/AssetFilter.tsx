@@ -521,7 +521,8 @@ function AssetFilter({
         case "ArrowDown":
           e.preventDefault();
           setFocusedIndex((prev) => {
-            const next = clamp(prev + 1);
+            const current = effectiveFocusedIndex >= 0 ? effectiveFocusedIndex : prev;
+            const next = clamp(current + 1);
             scrollIntoView(next);
             return next;
           });
@@ -529,7 +530,8 @@ function AssetFilter({
         case "ArrowUp":
           e.preventDefault();
           setFocusedIndex((prev) => {
-            const next = clamp(prev - 1);
+            const current = effectiveFocusedIndex >= 0 ? effectiveFocusedIndex : prev;
+            const next = clamp(current - 1);
             scrollIntoView(next);
             return next;
           });
@@ -630,7 +632,6 @@ function AssetFilter({
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
-            setFocusedIndex(0);
             onPageReset?.();
           }}
           onKeyDown={handleKeyDown}

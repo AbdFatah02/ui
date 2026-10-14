@@ -460,7 +460,7 @@ describe("ClaimableBalanceCard", () => {
 
       fireEvent.click(screen.getAllByRole("button", { name: "Claim" })[0]);
 
-      const buttons = screen.getAllByRole("button", { name: "Claim" });
+      const buttons = screen.getAllByRole("button", { name: /Claim/ });
       expect(buttons[1]).not.toBeDisabled();
 
       resolveClaim?.({ data: { hash: "x" }, error: null });

@@ -5,6 +5,7 @@ import { beforeEach,describe, expect, it, vi } from "vitest";
 import { AccountCard } from "@/components/AccountCard";
 import { WalletConnectButton } from "@/components/WalletConnectButton";
 import { SorokitProvider } from "@/context/SorokitProvider";
+import { ToastProvider } from "@/context/ToastContext";
 import { useSorokit } from "@/context/useSorokit";
 import { getClient } from "@/lib/client";
 
@@ -43,11 +44,13 @@ describe("Wallet Connect Flow Integration", () => {
 
   it("connects wallet, displays account, and disconnects", async () => {
     render(
-      <SorokitProvider client={mockClient}>
-        <WalletConnectButton />
-        <AccountCard />
-        <DisconnectTrigger />
-      </SorokitProvider>
+      <ToastProvider>
+        <SorokitProvider client={mockClient}>
+          <WalletConnectButton />
+          <AccountCard />
+          <DisconnectTrigger />
+        </SorokitProvider>
+      </ToastProvider>,
     );
 
     // The mock address also ends in "123456789", so every sequence assertion is

@@ -276,7 +276,11 @@ describe("SorobanPanel", () => {
       const eleventh = `C${"B".repeat(55)}`;
       mockInvokeContract.mockResolvedValueOnce({ data: { ok: true }, error: null });
       render(
-        <SorobanPanel contractId={eleventh} onContractIdChange={() => {}} />,
+        <SorobanPanel
+          contractId={eleventh}
+          onContractIdChange={() => {}}
+          maxHistory={10}
+        />,
       );
       fireEvent.change(screen.getByLabelText("Method"), {
         target: { value: "balance" },

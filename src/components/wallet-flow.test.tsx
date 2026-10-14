@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { ToastProvider } from "@/context/ToastContext";
 import { useSorokit } from "@/context/useSorokit";
 
 import { AccountCard } from "./AccountCard";
@@ -39,10 +40,10 @@ describe("Wallet flow integration", () => {
     });
 
     render(
-      <>
+      <ToastProvider>
         <WalletConnectButton />
         <AccountCard />
-      </>,
+      </ToastProvider>,
     );
 
     expect(screen.getByText("Connect Wallet")).toBeInTheDocument();
@@ -68,10 +69,10 @@ describe("Wallet flow integration", () => {
     });
 
     render(
-      <>
+      <ToastProvider>
         <WalletConnectButton />
         <AccountCard />
-      </>,
+      </ToastProvider>,
     );
 
     expect(screen.getByText("GABC12...WXYZ")).toBeInTheDocument();

@@ -170,7 +170,10 @@ describe("ContractInteractionBuilder", () => {
       target: { value: "read" },
     });
     const [argName] = Object.keys(values);
-    fireEvent.change(screen.getByRole("textbox", { name: argName }), {
+    const input =
+      screen.queryByRole("textbox", { name: argName }) ??
+      screen.getByRole("spinbutton", { name: argName });
+    fireEvent.change(input, {
       target: { value: (values as Record<string, string>)[argName] },
     });
 
