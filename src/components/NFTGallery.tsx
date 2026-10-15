@@ -21,8 +21,14 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useSorokit } from "@/context/useSorokit";
+import { useIsVisible } from "@/hooks/useIsVisible";
 import type { Nft, NftCollection } from "@/lib/client";
-import { IPFS_GATEWAY_COUNT, ipfsContentPath, resolveIpfsUrl } from "@/lib/ipfs";
+import {
+  IPFS_GATEWAY_COUNT,
+  IPFS_REQUEST_TIMEOUT_MS,
+  ipfsContentPath,
+  resolveIpfsUrl,
+} from "@/lib/ipfs";
 import { cn, validateStellarAddress } from "@/lib/utils";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -88,20 +94,39 @@ function NftImage({
     setFailed(false);
   }
 
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
+  // `loading="lazy"` defers off-screen images, so the stall timer only runs
+  // while the image is actually in view (and therefore actually loading).
+  const [imgRef, inView] = useIsVisible<HTMLImageElement>();
+  const src = isIpfs ? resolveIpfsUrl(source, attempt) : source;
+
+  const handleFailure = useCallback(() => {
+    if (isIpfs && attempt + 1 < IPFS_GATEWAY_COUNT) {
+      setAttempt((current) => current + 1);
+      return;
+    }
+    setFailed(true);
+  }, [isIpfs, attempt]);
+
+  // An unresponsive gateway can hold a request open indefinitely without ever
+  // firing `error`. Give each gateway IPFS_REQUEST_TIMEOUT_MS; swapping `src`
+  // to the next gateway cancels the stalled request in the browser.
+  useEffect(() => {
+    if (!source || failed || !inView || loadedSrc === src) return;
+    const timer = window.setTimeout(handleFailure, IPFS_REQUEST_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [source, failed, inView, loadedSrc, src, handleFailure]);
+
   if (!source || failed) return <>{fallback}</>;
 
   return (
     <img
-      src={isIpfs ? resolveIpfsUrl(source, attempt) : source}
+      ref={imgRef}
+      src={src}
       alt={alt}
       loading="lazy"
-      onError={() => {
-        if (isIpfs && attempt + 1 < IPFS_GATEWAY_COUNT) {
-          setAttempt((current) => current + 1);
-          return;
-        }
-        setFailed(true);
-      }}
+      onLoad={() => setLoadedSrc(src)}
+      onError={handleFailure}
       className={className}
     />
   );

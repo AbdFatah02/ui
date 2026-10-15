@@ -13,7 +13,9 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useSorokit } from "@/context/useSorokit";
-import { cn } from "@/lib/utils";
+import type { SorobanResourceUsage } from "@/lib/client";
+import { parseContractPanic } from "@/lib/diagnostics";
+import { cn, toXLM } from "@/lib/utils";
 
 // Soroban Protocol Execution Limits
 export const MIN_CPU_INSTRUCTIONS = 40_000;
@@ -36,6 +38,75 @@ export const SOROBAN_PROTOCOL_LIMITS = {
     max: MAX_MEMORY_BYTES,
   },
 } as const;
+
+/**
+ * Soroban resource fee rates, in stroops. Defaults mirror the Mainnet
+ * network configuration (`ConfigSettingContractComputeV0` /
+ * `ConfigSettingContractLedgerCostV0`); validators can vote to change them,
+ * so they are an estimate, not a quote. Memory has no separate fee — it is
+ * bounded by the limit but billed through CPU instructions.
+ */
+export const RESOURCE_FEE_RATES = {
+  /** Stroops per 10,000 CPU instructions. */
+  feePerInstructionIncrement: 25,
+  /** Stroops per 1 KB of ledger entries read. */
+  feeRead1Kb: 1_786,
+  /** Stroops per 1 KB of ledger entries written. */
+  feeWrite1Kb: 11_800,
+} as const;
+
+export interface ResourceCost {
+  key: "cpu" | "memory" | "read" | "write";
+  label: string;
+  amount: number;
+  unit: string;
+  feeStroops: number;
+}
+
+/** Sanitize a resource count: missing, negative or non-finite becomes 0. */
+function resourceAmount(value: number | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : 0;
+}
+
+/**
+ * Per-resource fee breakdown. Each fee rounds up like the network does, and
+ * zero (or missing) resource limits produce zero rows rather than NaN.
+ */
+export function computeResourceCosts(
+  resources: SorobanResourceUsage | undefined,
+  rates: typeof RESOURCE_FEE_RATES = RESOURCE_FEE_RATES,
+): ResourceCost[] {
+  const cpu = resourceAmount(resources?.cpuInstructions);
+  const memory = resourceAmount(resources?.memoryBytes);
+  const read = resourceAmount(resources?.readBytes);
+  const write = resourceAmount(resources?.writeBytes);
+  return [
+    {
+      key: "cpu",
+      label: "CPU Instructions",
+      amount: cpu,
+      unit: "instructions",
+      feeStroops: Math.ceil((cpu * rates.feePerInstructionIncrement) / 10_000),
+    },
+    { key: "memory", label: "Memory", amount: memory, unit: "bytes", feeStroops: 0 },
+    {
+      key: "read",
+      label: "Ledger Read",
+      amount: read,
+      unit: "bytes",
+      feeStroops: Math.ceil((read * rates.feeRead1Kb) / 1024),
+    },
+    {
+      key: "write",
+      label: "Ledger Write",
+      amount: write,
+      unit: "bytes",
+      feeStroops: Math.ceil((write * rates.feeWrite1Kb) / 1024),
+    },
+  ];
+}
 
 export type GasPresetName = "Conservative" | "Aggressive" | "Custom";
 
@@ -122,6 +193,7 @@ interface GasEstimate {
   breakdown: OperationGasBreakdown[];
   scenarios: FeeScenario[];
   customMultiplier: number;
+  resources?: SorobanResourceUsage;
 }
 
 function formatStroops(stroops: string): string {
@@ -498,7 +570,7 @@ export function GasOptimizer({
             <div className="h-24 rounded-lg bg-surface-2 animate-pulse" />
           </div>
         ) : error || scenarioError ? (
-          <p className="text-[12px] text-red">{error || scenarioError}</p>
+          <SimulationError message={(error || scenarioError) as string} />
         ) : gasPriceData && estimate ? (
           <div className="flex flex-col gap-5">
             <NetworkStats gasPriceData={gasPriceData} />
@@ -531,6 +603,17 @@ export function GasOptimizer({
                 onChange={handleMultiplierChange}
               />
             </div>
+            <ResourceBreakdown
+              resources={
+                estimate.resources ?? {
+                  cpuInstructions,
+                  memoryBytes,
+                  readBytes: 0,
+                  writeBytes: 0,
+                }
+              }
+              simulated={estimate.resources !== undefined}
+            />
             <OperationBreakdown breakdown={estimate.breakdown} />
             <FeeScenarios
               scenarios={estimate.scenarios}
@@ -544,6 +627,119 @@ export function GasOptimizer({
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Simulation/network error. Contract panics and host errors are explained
+ * in plain English; the raw diagnostic output stays available, collapsed,
+ * for developers.
+ */
+function SimulationError({ message }: { message: string }) {
+  const panic = parseContractPanic(message);
+  if (!panic) {
+    return <p className="text-[12px] text-red">{message}</p>;
+  }
+  return (
+    <div
+      role="alert"
+      data-testid="contract-panic"
+      className="rounded-lg border border-line bg-surface-2 px-4 py-3 flex flex-col gap-2"
+    >
+      <span className="text-[12px] font-semibold text-red">Contract simulation failed</span>
+      <p className="text-[12px] text-ink-2">{panic.summary}</p>
+      <details className="text-[11px] text-ink-3">
+        <summary className="cursor-pointer select-none">Raw diagnostics</summary>
+        <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[10px]">
+          {message}
+        </pre>
+      </details>
+    </div>
+  );
+}
+
+/**
+ * Collapsible per-resource cost breakdown (#959). Uses the simulated usage
+ * when the estimate includes it, otherwise the configured limits — the worst
+ * case the transaction is allowed to consume.
+ */
+function ResourceBreakdown({
+  resources,
+  simulated,
+}: {
+  resources: SorobanResourceUsage;
+  simulated: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const costs = computeResourceCosts(resources);
+  const totalStroops = costs.reduce((sum, c) => sum + c.feeStroops, 0);
+
+  return (
+    <div className="rounded-lg bg-surface-2 border border-line">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls="gas-resource-breakdown"
+        className="w-full flex items-center justify-between px-4 py-3 text-left"
+      >
+        <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-4">
+          Resource Breakdown
+        </span>
+        <span className="text-[11px] text-ink-3">
+          {totalStroops.toLocaleString()} stroops {open ? "▾" : "▸"}
+        </span>
+      </button>
+      {open && (
+        <div id="gas-resource-breakdown" className="px-4 pb-3">
+          <p className="text-[10px] text-ink-4 mb-2">
+            {simulated
+              ? "Resources consumed in simulation."
+              : "Based on the configured execution limits (no simulation data)."}
+          </p>
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr>
+                <th className="text-left py-1 font-semibold text-ink-3 text-[10px] uppercase tracking-wider">
+                  Resource
+                </th>
+                <th className="text-right py-1 font-semibold text-ink-3 text-[10px] uppercase tracking-wider">
+                  Usage
+                </th>
+                <th className="text-right py-1 font-semibold text-ink-3 text-[10px] uppercase tracking-wider">
+                  Fee (stroops)
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {costs.map((cost) => (
+                <tr key={cost.key} data-testid={`resource-${cost.key}`} className="border-t border-line">
+                  <td className="py-1.5 text-ink-2">{cost.label}</td>
+                  <td className="py-1.5 text-right font-mono text-ink">
+                    {cost.amount.toLocaleString()} {cost.unit}
+                  </td>
+                  <td className="py-1.5 text-right font-mono text-ink">
+                    {cost.key === "memory" ? "—" : cost.feeStroops.toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+              <tr className="border-t border-line">
+                <td className="py-1.5 font-semibold text-ink">Resource fee</td>
+                <td className="py-1.5 text-right font-mono text-ink-3">
+                  {toXLM(String(totalStroops))} XLM
+                </td>
+                <td
+                  data-testid="resource-total"
+                  className="py-1.5 text-right font-mono font-semibold text-ink"
+                >
+                  {totalStroops.toLocaleString()}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -848,10 +1044,10 @@ function OperationBreakdown({
 
   const totalGasUnits = breakdown.reduce((s, b) => s + b.gasUnits, 0);
   const totalFeeStroops = breakdown.reduce(
-    (s, b) => s + parseInt(b.feeStroops, 10),
+    (s, b) => s + (parseInt(b.feeStroops, 10) || 0),
     0,
   );
-  const totalFeeXlm = breakdown.reduce((s, b) => s + parseFloat(b.feeXlm), 0);
+  const totalFeeXlm = breakdown.reduce((s, b) => s + (parseFloat(b.feeXlm) || 0), 0);
 
   return (
     <div className="flex flex-col gap-2">
@@ -996,7 +1192,7 @@ function OptimizerSuggestions({
 
   if (estimate.customMultiplier > 1) {
     const totalStroops = estimate.breakdown.reduce(
-      (s, b) => s + parseInt(b.feeStroops, 10),
+      (s, b) => s + (parseInt(b.feeStroops, 10) || 0),
       0,
     );
     const savingsStroops = String(
@@ -1030,7 +1226,7 @@ function OptimizerSuggestions({
   }
 
   const totalStroops = estimate.breakdown.reduce(
-    (s, b) => s + parseInt(b.feeStroops, 10),
+    (s, b) => s + (parseInt(b.feeStroops, 10) || 0),
     0,
   );
   if (totalStroops > 100000) {
@@ -1085,7 +1281,7 @@ function TotalFee({
   multiplier: number;
 }) {
   const totalStroops = estimate.breakdown.reduce(
-    (s, b) => s + parseInt(b.feeStroops, 10),
+    (s, b) => s + (parseInt(b.feeStroops, 10) || 0),
     0,
   );
   const adjustedStroops = Math.round(totalStroops * multiplier);
