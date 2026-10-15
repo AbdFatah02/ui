@@ -53,11 +53,21 @@ export type FeeScenario = {
   savings: string;
 };
 
+/** Soroban resources a simulated transaction consumed (from simulateTransaction). */
+export type SorobanResourceUsage = {
+  cpuInstructions?: number;
+  memoryBytes?: number;
+  readBytes?: number;
+  writeBytes?: number;
+};
+
 export type GasEstimate = {
   totalGasUnits: number;
   breakdown: OperationGasBreakdown[];
   scenarios: FeeScenario[];
   customMultiplier: number;
+  /** Simulated resource usage; absent for classic (non-Soroban) operations. */
+  resources?: SorobanResourceUsage;
 };
 
 export type SorokitClient = {

@@ -11,6 +11,29 @@ import { cn, toXLM } from "@/lib/utils";
 
 export const MIN_NETWORK_BASE_FEE = 100;
 
+/**
+ * Base fee (stroops) above which the network is treated as surge pricing:
+ * more than 3x the 100-stroop minimum means ledgers are full and
+ * transactions are bidding against each other for inclusion.
+ */
+export const SURGE_FEE_THRESHOLD = MIN_NETWORK_BASE_FEE * 3;
+
+/** Speed multipliers a user can apply on top of the recommended fee. */
+export const FEE_MULTIPLIERS = [1.2, 1.5, 2] as const;
+export type FeeMultiplier = (typeof FEE_MULTIPLIERS)[number];
+
+/**
+ * Recommended fee scaled by `multiplier`, rounded up to a whole stroop.
+ * Computed in tenths to avoid float artifacts (500 * 1.2 is
+ * 600.0000000000001 in floating point, which would round up to 601).
+ */
+export function applyFeeMultiplier(fee: string, multiplier: number): string {
+  const stroops = parseInt(fee, 10);
+  if (Number.isNaN(stroops)) return fee;
+  const tenths = Math.round(multiplier * 10);
+  return String(Math.ceil((stroops * tenths) / 10));
+}
+
 export interface FeeData {
   baseFee: string;
   recommended: string;
@@ -28,6 +51,11 @@ interface FeeEstimatorProps {
   customFee?: string;
   /** Callback fired when custom fee input changes. */
   onCustomFeeChange?: (customFee: string) => void;
+  /**
+   * Callback fired when the user toggles a speed multiplier. Receives the
+   * multiplier (null when cleared) and the resulting fee in stroops.
+   */
+  onMultiplierChange?: (multiplier: FeeMultiplier | null, fee: string | null) => void;
 }
 
 export function FeeEstimator({
@@ -37,6 +65,7 @@ export function FeeEstimator({
   onFeeLoad,
   customFee: customFeeProp,
   onCustomFeeChange,
+  onMultiplierChange,
 }: FeeEstimatorProps) {
   const { registerWatcher } = useSorokit();
   const [containerRef, isVisible] = useIsVisible<HTMLDivElement>();
@@ -120,6 +149,22 @@ export function FeeEstimator({
     };
   }, [registerWatcher]);
 
+  const [multiplier, setMultiplier] = useState<FeeMultiplier | null>(null);
+  const multipliedFee =
+    fee && multiplier !== null ? applyFeeMultiplier(fee.recommended, multiplier) : null;
+
+  const handleMultiplierToggle = (value: FeeMultiplier) => {
+    const next = multiplier === value ? null : value;
+    setMultiplier(next);
+    onMultiplierChange?.(
+      next,
+      fee && next !== null ? applyFeeMultiplier(fee.recommended, next) : null,
+    );
+  };
+
+  const baseFeeStroops = fee ? parseInt(fee.baseFee, 10) : NaN;
+  const isSurge = !Number.isNaN(baseFeeStroops) && baseFeeStroops > SURGE_FEE_THRESHOLD;
+
   const compactContent = fee
     ? `Base: ${fee.baseFee} stroops · Recommended: ${fee.recommended} stroops`
     : null;
@@ -152,7 +197,14 @@ export function FeeEstimator({
               </button>
             </span>
           ) : fee ? (
-            <span className="text-[11px] text-ink">{compactContent}</span>
+            <span className="inline-flex items-center gap-2 text-[11px] text-ink">
+              {compactContent}
+              {isSurge && (
+                <span role="alert">
+                  <Badge variant="warning">Surge pricing</Badge>
+                </span>
+              )}
+            </span>
           ) : null}
         </div>
       ) : (
@@ -206,6 +258,7 @@ export function FeeEstimator({
               </div>
             ) : fee ? (
               <>
+                {isSurge && <SurgeWarning baseFee={baseFeeStroops} />}
                 <div className="flex items-center gap-4">
                   <FeeCell
                     label="Base Fee"
@@ -223,6 +276,47 @@ export function FeeEstimator({
                       parseInt(fee.baseFee, 10) * 2
                     }
                   />
+                </div>
+                <div className="mt-4 pt-4 border-t border-line">
+                  <div className="flex items-center justify-between gap-3">
+                    <span
+                      id="fee-multiplier-label"
+                      className="text-[11px] font-medium text-ink-2"
+                    >
+                      Speed Multiplier
+                    </span>
+                    <div
+                      role="group"
+                      aria-labelledby="fee-multiplier-label"
+                      className="flex items-center gap-1.5"
+                    >
+                      {FEE_MULTIPLIERS.map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          aria-pressed={multiplier === m}
+                          onClick={() => handleMultiplierToggle(m)}
+                          className={cn(
+                            "px-2.5 py-1 text-[11px] font-medium rounded-lg border transition-colors",
+                            multiplier === m
+                              ? "border-brand bg-brand-dim text-brand"
+                              : "border-line bg-surface-2 text-ink-2 hover:text-ink",
+                          )}
+                        >
+                          {m.toFixed(1)}x
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {multipliedFee !== null && (
+                    <p
+                      data-testid="multiplied-fee"
+                      className="text-[11px] text-ink-3 mt-1.5"
+                    >
+                      Priority fee: <span className="text-ink font-semibold">{multipliedFee}</span>{" "}
+                      stroops (≈ {toXLM(multipliedFee)} XLM) for faster inclusion
+                    </p>
+                  )}
                 </div>
                 <div className="mt-4 pt-4 border-t border-line">
                   <label
@@ -267,6 +361,29 @@ export function FeeEstimator({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function SurgeWarning({ baseFee }: { baseFee: number }) {
+  const ratio = (baseFee / MIN_NETWORK_BASE_FEE).toFixed(1);
+  return (
+    <div
+      role="alert"
+      data-testid="surge-warning"
+      className="mb-4 rounded-lg border border-warning-dim bg-warning-dim px-3 py-2"
+    >
+      <div className="flex items-center gap-2">
+        <Badge variant="warning">Surge pricing</Badge>
+        <span className="text-[12px] font-semibold text-ink">
+          Network fees are elevated ({ratio}x the minimum)
+        </span>
+      </div>
+      <p className="text-[11px] text-ink-2 mt-1">
+        The base fee is {baseFee} stroops. Ledgers are at capacity, so
+        transactions are competing on fee for inclusion. Pay at least the
+        recommended fee, or wait for congestion to ease.
+      </p>
     </div>
   );
 }

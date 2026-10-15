@@ -231,10 +231,82 @@ describe("NFTCard", () => {
 
     fireEvent.error(img);
     img = screen.getByAltText("Cool Cat #1");
+    expect(img).toHaveAttribute("src", "https://gateway.pinata.cloud/ipfs/bafytestcid/cat.png");
+
+    fireEvent.error(img);
+    img = screen.getByAltText("Cool Cat #1");
     expect(img).toHaveAttribute("src", "https://dweb.link/ipfs/bafytestcid/cat.png");
 
     fireEvent.error(img);
     expect(screen.getByText("No image")).toBeInTheDocument();
+  });
+
+  it("moves to the next IPFS gateway when an image stalls for 8 seconds (#957)", () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <NFTCard
+          nft={makeNft({
+            metadata: { name: "Cool Cat #1", attributes: [], image: "ipfs://bafytestcid/cat.png" },
+          })}
+          selected={false}
+          bulkMode={false}
+          onSelect={onSelect}
+          onSend={onSend}
+          onList={onList}
+        />
+      );
+      expect(screen.getByAltText("Cool Cat #1")).toHaveAttribute(
+        "src",
+        "https://ipfs.io/ipfs/bafytestcid/cat.png",
+      );
+
+      act(() => {
+        vi.advanceTimersByTime(7_999);
+      });
+      expect(screen.getByAltText("Cool Cat #1")).toHaveAttribute(
+        "src",
+        "https://ipfs.io/ipfs/bafytestcid/cat.png",
+      );
+
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(screen.getByAltText("Cool Cat #1")).toHaveAttribute(
+        "src",
+        "https://cloudflare-ipfs.com/ipfs/bafytestcid/cat.png",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps an image that finished loading instead of timing it out (#957)", () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <NFTCard
+          nft={makeNft({
+            metadata: { name: "Cool Cat #1", attributes: [], image: "ipfs://bafytestcid/cat.png" },
+          })}
+          selected={false}
+          bulkMode={false}
+          onSelect={onSelect}
+          onSend={onSend}
+          onList={onList}
+        />
+      );
+      fireEvent.load(screen.getByAltText("Cool Cat #1"));
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+      expect(screen.getByAltText("Cool Cat #1")).toHaveAttribute(
+        "src",
+        "https://ipfs.io/ipfs/bafytestcid/cat.png",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("invokes onSend when Send button clicked", () => {
