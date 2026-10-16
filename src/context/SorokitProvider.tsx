@@ -395,6 +395,11 @@ export function SorokitProvider({
     [reportError, switchNetwork],
   );
 
+  const clearCustomNetworks = useCallback(() => {
+    window.localStorage.removeItem(STORAGE_KEY_CUSTOM_NETWORKS);
+    setCustomNetworks([]);
+  }, []);
+
   const clearError = useCallback(() => {
     setAccountError(null);
     setNetworkError(null);
@@ -450,6 +455,7 @@ export function SorokitProvider({
       isSwitchingNetwork,
       customNetworks,
       addCustomNetwork,
+      clearCustomNetworks,
       resetTransactionWatchers,
       registerWatcher,
       error,
@@ -478,6 +484,7 @@ export function SorokitProvider({
       isSwitchingNetwork,
       customNetworks,
       addCustomNetwork,
+      clearCustomNetworks,
       resetTransactionWatchers,
       registerWatcher,
       error,
