@@ -9,7 +9,7 @@ import { SorokitProvider } from "./SorokitProvider";
 import { useSorokit } from "./useSorokit";
 
 const TestComponent = () => {
-  const { address, account, balances, connectWallet, disconnectWallet, switchNetwork, refreshAccount, isLoadingAccount, isDisconnecting, error, walletError, errorHistory } = useSorokit();
+  const { address, account, balances, connectWallet, disconnectWallet, switchNetwork, refreshAccount, clearCustomNetworks, customNetworks, isLoadingAccount, isDisconnecting, error, walletError, errorHistory } = useSorokit();
 
   return (
     <div>
@@ -21,9 +21,11 @@ const TestComponent = () => {
       <div data-testid="isLoadingAccount">{isLoadingAccount ? "true" : "false"}</div>
       <div data-testid="isDisconnecting">{isDisconnecting ? "true" : "false"}</div>
       <div data-testid="errorHistoryCount">{errorHistory.length}</div>
+      <div data-testid="customNetworks">{customNetworks?.map((net) => net.name).join(",")}</div>
       <button onClick={() => connectWallet()}>Connect</button>
       <button onClick={() => disconnectWallet()}>Disconnect</button>
       <button onClick={() => switchNetwork("testnet")}>Switch</button>
+      <button onClick={() => clearCustomNetworks?.()}>Reset to Defaults</button>
       <button onClick={() => refreshAccount()}>Refresh</button>
     </div>
   );
@@ -326,6 +328,27 @@ describe("SorokitProvider", () => {
 
     beforeEach(() => {
       window.localStorage.clear();
+    });
+
+    it("removes persisted custom networks when resetting to defaults", () => {
+      window.localStorage.setItem(
+        "sorokit_custom_networks",
+        JSON.stringify([
+          {
+            name: "Local Dev",
+            rpcUrl: "https://rpc.example.com",
+            horizonUrl: "https://horizon.example.com",
+            passphrase: "Local Dev Network",
+          },
+        ]),
+      );
+      renderWithProvider(<TestComponent />, { client: mockClient });
+
+      expect(screen.getByTestId("customNetworks")).toHaveTextContent("Local Dev");
+      fireEvent.click(screen.getByText("Reset to Defaults"));
+
+      expect(window.localStorage.getItem("sorokit_custom_networks")).toBeNull();
+      expect(screen.getByTestId("customNetworks")).toBeEmptyDOMElement();
     });
 
     it("persists the selected network across reloads", async () => {

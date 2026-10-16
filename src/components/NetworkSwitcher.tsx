@@ -78,13 +78,18 @@ export const STANDARD_NETWORKS: NetworkPreset[] = [
 export const NETWORK_SWITCHER_SHORTCUT = "Alt+N";
 
 /**
- * Validates that a URL string is formatted properly and uses http:// or https:// protocol.
+ * HTTPS is required except for localhost HTTP endpoints in development.
  */
 export function isValidHttpUrl(urlString: string): boolean {
   if (!urlString || typeof urlString !== "string") return false;
   try {
     const url = new URL(urlString.trim());
-    return url.protocol === "http:" || url.protocol === "https:";
+    return (
+      url.protocol === "https:" ||
+      (import.meta.env.DEV &&
+        url.protocol === "http:" &&
+        url.hostname === "localhost")
+    );
   } catch {
     return false;
   }
@@ -199,11 +204,15 @@ export function NetworkSwitcher() {
       return;
     }
     if (!isValidHttpUrl(customRpcUrl)) {
-      setFormError("RPC URL must be a valid HTTP or HTTPS URL");
+      setFormError(
+        "RPC URL must use HTTPS (HTTP is allowed only for localhost in development)",
+      );
       return;
     }
     if (customHorizonUrl.trim() && !isValidHttpUrl(customHorizonUrl)) {
-      setFormError("Horizon URL must be a valid HTTP or HTTPS URL");
+      setFormError(
+        "Horizon URL must use HTTPS (HTTP is allowed only for localhost in development)",
+      );
       return;
     }
 
@@ -218,12 +227,29 @@ export function NetworkSwitcher() {
       return;
     }
 
+    const passphrase =
+      customPassphrase.trim() || "Standalone Network ; February 2017";
+    if (
+      customNetworks.some(
+        (existing) =>
+          existing.name !== customName.trim() &&
+          existing.passphrase.trim() === passphrase,
+      )
+    ) {
+      setFormError("Network passphrase must be unique");
+      return;
+    }
+
     setFormError("");
+    if (!customHorizonUrl.trim() && !import.meta.env.DEV) {
+      setFormError("Horizon URL is required outside development");
+      return;
+    }
     const newConfig: NetworkInfo = {
       name: customName.trim(),
       rpcUrl: customRpcUrl.trim(),
       horizonUrl: customHorizonUrl.trim() || "http://localhost:8000",
-      passphrase: customPassphrase.trim() || "Standalone Network ; February 2017",
+      passphrase,
       status: "online",
     };
 
@@ -663,7 +689,7 @@ export function NetworkSwitcher() {
                   id="custom-rpc-url"
                   type="url"
                   required
-                  placeholder="e.g. http://localhost:8000/soroban/rpc"
+                  placeholder="https://rpc.example.com (or http://localhost:8000 in development)"
                   value={customRpcUrl}
                   onChange={(e) => setCustomRpcUrl(e.target.value)}
                   className="w-full h-9 px-3 rounded-lg bg-surface-2 border border-line text-[13px] text-ink font-mono focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand placeholder:text-ink-4"
@@ -680,7 +706,7 @@ export function NetworkSwitcher() {
                 <input
                   id="custom-horizon-url"
                   type="url"
-                  placeholder="e.g. http://localhost:8000"
+                  placeholder="https://horizon.example.com (or http://localhost:8000 in development)"
                   value={customHorizonUrl}
                   onChange={(e) => setCustomHorizonUrl(e.target.value)}
                   className="w-full h-9 px-3 rounded-lg bg-surface-2 border border-line text-[13px] text-ink font-mono focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand placeholder:text-ink-4"
