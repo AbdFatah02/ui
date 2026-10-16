@@ -132,6 +132,85 @@ function NftImage({
   );
 }
 
+type MediaKind = "image" | "video" | "audio";
+
+const VIDEO_EXT = /\.(mp4|webm|mov|m4v|ogv)(\?|#|$)/i;
+const AUDIO_EXT = /\.(mp3|wav|ogg|oga|flac|m4a|aac)(\?|#|$)/i;
+
+/** Detect the media kind from metadata MIME type, falling back to file extension. */
+function detectMediaKind(metadata: Nft["metadata"]): { kind: MediaKind; url?: string } {
+  const mime = metadata.mimeType?.toLowerCase() ?? "";
+  const url = metadata.animationUrl?.trim() || metadata.image?.trim() || undefined;
+  if (mime.startsWith("video/")) return { kind: "video", url };
+  if (mime.startsWith("audio/")) return { kind: "audio", url };
+  if (url && VIDEO_EXT.test(url)) return { kind: "video", url };
+  if (url && AUDIO_EXT.test(url)) return { kind: "audio", url };
+  return { kind: "image", url: metadata.image };
+}
+
+/** Renders an NFT's media: <video>/<audio> with controls for A/V assets, otherwise an image. */
+function NftMedia({
+  metadata,
+  className,
+  fallback,
+}: {
+  metadata: Nft["metadata"];
+  className?: string;
+  fallback: React.ReactNode;
+}) {
+  const { kind, url } = detectMediaKind(metadata);
+  const src = url && ipfsContentPath(url) !== null ? resolveIpfsUrl(url, 0) : url;
+
+  if (kind === "video" && src) {
+    return (
+      <video
+        src={src}
+        poster={metadata.image ? resolveIpfsUrl(metadata.image, 0) : undefined}
+        controls
+        preload="metadata"
+        playsInline
+        aria-label={metadata.name}
+        data-testid="nft-video"
+        className={className}
+      />
+    );
+  }
+
+  if (kind === "audio" && src) {
+    return (
+      <div className="relative w-full h-full flex flex-col items-center justify-center gap-3 p-3">
+        {metadata.image && (
+          <NftImage
+            image={metadata.image}
+            alt={metadata.name}
+            className="w-full flex-1 min-h-0 object-cover rounded-lg"
+            fallback={
+              <HugeiconsIcon icon={Album01Icon} size={32} color="currentColor" strokeWidth={1} />
+            }
+          />
+        )}
+        <audio
+          src={src}
+          controls
+          preload="metadata"
+          aria-label={metadata.name}
+          data-testid="nft-audio"
+          className="w-full shrink-0"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <NftImage
+      image={metadata.image}
+      alt={metadata.name}
+      className={className}
+      fallback={fallback}
+    />
+  );
+}
+
 // ─── NFTCard ──────────────────────────────────────────────────────────────────
 
 interface NFTCardProps {
@@ -181,9 +260,8 @@ export function NFTCard({ nft, selected, bulkMode, onSelect, onSend, onList }: N
 
       {/* Image */}
       <div className="aspect-square w-full bg-surface-2 flex items-center justify-center overflow-hidden">
-        <NftImage
-          image={nft.metadata.image}
-          alt={nft.metadata.name}
+        <NftMedia
+          metadata={nft.metadata}
           className="w-full h-full object-cover"
           fallback={
             <div className="flex flex-col items-center gap-2 text-ink-4">
@@ -705,9 +783,8 @@ function NFTDetailDialog({ nft, open, onClose, onSend, onList }: NFTDetailDialog
         >
           {/* Image */}
           <div className="aspect-square w-full bg-surface-2 overflow-hidden">
-            <NftImage
-              image={nft.metadata.image}
-              alt={nft.metadata.name}
+            <NftMedia
+              metadata={nft.metadata}
               className="w-full h-full object-cover"
               fallback={
                 <div className="w-full h-full flex items-center justify-center text-ink-4">
@@ -801,6 +878,21 @@ function StatCell({ label, value }: { label: string; value: string }) {
 
 export interface NFTGalleryProps {
   className?: string;
+}
+
+function NftSkeletonCard() {
+  return (
+    <div
+      data-testid="nft-skeleton-card"
+      className="rounded-xl border border-line overflow-hidden"
+    >
+      <Skeleton className="aspect-square w-full" />
+      <div className="p-3 flex flex-col gap-2">
+        <Skeleton className="h-3.5 w-3/4" />
+        <Skeleton className="h-3 w-1/2" />
+      </div>
+    </div>
+  );
 }
 
 type SortKey = "name" | "rarity" | "floor";
@@ -1128,16 +1220,10 @@ export function NFTGallery({ className }: NFTGalleryProps) {
             {loading && allNfts.length === 0 ? (
               <div
                 data-testid="nft-loading-skeleton"
-                className="grid grid-cols-2 sm:grid-cols-3 gap-4"
+                className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
               >
-                {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <div key={i} className="rounded-xl border border-line overflow-hidden">
-                    <Skeleton className="aspect-square w-full" />
-                    <div className="p-3 flex flex-col gap-2">
-                      <Skeleton className="h-3.5 w-3/4" />
-                      <Skeleton className="h-3 w-1/2" />
-                    </div>
-                  </div>
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                  <NftSkeletonCard key={i} />
                 ))}
               </div>
             ) : displayedNfts.length === 0 ? (
@@ -1148,7 +1234,7 @@ export function NFTGallery({ className }: NFTGalleryProps) {
               <div
                 role="list"
                 aria-label="NFT grid"
-                className="grid grid-cols-2 sm:grid-cols-3 gap-4"
+                className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
               >
                 {displayedNfts.map((nft) => (
                   <div
@@ -1167,6 +1253,8 @@ export function NFTGallery({ className }: NFTGalleryProps) {
                     />
                   </div>
                 ))}
+                {loading &&
+                  [1, 2, 3, 4].map((i) => <NftSkeletonCard key={`more-${i}`} />)}
               </div>
             )}
           </div>
