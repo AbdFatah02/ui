@@ -1,5 +1,6 @@
 import { type ComponentType, lazy, Suspense, useCallback, useEffect, useState } from "react";
 
+import { DashboardOverview } from "@/components/DashboardOverview";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { GovernanceDashboard } from "@/components/GovernanceDashboard";
 import { NetworkBanner } from "@/components/NetworkBanner";
@@ -175,6 +176,7 @@ export function Dashboard({
             className="mx-auto px-6 py-8 sm:px-10 sm:py-10 min-h-[300px]"
             style={{ maxWidth: maxContentWidth }}
           >
+            <DashboardOverview onNavigate={handleNavigate} />
             {[...visited].map((section) => {
               const Screen = SCREENS[section];
               return (

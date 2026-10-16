@@ -18,11 +18,37 @@ type AssetBreakdown = {
   percentage: number;
 };
 
+/** Chart palette tokens defined per-theme in index.css (contrast-checked for light and dark). */
+const CHART_COLORS = [
+  "var(--color-chart-1)",
+  "var(--color-chart-2)",
+  "var(--color-chart-3)",
+  "var(--color-chart-4)",
+  "var(--color-chart-5)",
+];
+
+/** Spending at or above this share of the limit is flagged as critical. */
+const CRITICAL_THRESHOLD = 90;
+
+/** Returns an inline error message for an invalid budget limit, or null when valid. */
+function validateBudgetLimit(raw: string): string | null {
+  if (raw.trim() === "") return "Budget limit is required.";
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return "Enter a valid number.";
+  if (value < 0) return "Budget limit cannot be negative.";
+  if (value === 0) return "Budget limit must be greater than 0.";
+  return null;
+}
+
 export function BudgetScreen() {
   const [period, setPeriod] = useState<"daily" | "weekly" | "monthly">(
     "monthly",
   );
-  const [budgetLimit, setBudgetLimit] = useState(1500);
+  const [budgetLimitInput, setBudgetLimitInput] = useState("1500");
+  const [lastValidLimit, setLastValidLimit] = useState(1500);
+  const budgetLimitError = validateBudgetLimit(budgetLimitInput);
+  // Invalid input never reaches the calculations; keep the last valid limit.
+  const budgetLimit = lastValidLimit;
   const [currentSpent] = useState(1280);
   const [warningThreshold, setWarningThreshold] = useState(80); // 80% default
   const [lockTransactions, setLockTransactions] = useState(false);
@@ -80,10 +106,11 @@ export function BudgetScreen() {
 
   // Calculations
   const percentageUsed = (currentSpent / budgetLimit) * 100;
+  const isOverBudget = percentageUsed >= 100;
+  const isCriticalLimit =
+    percentageUsed >= CRITICAL_THRESHOLD && !isOverBudget;
   const isApproachingLimit =
-    percentageUsed >= warningThreshold && percentageUsed < 95;
-  const isCriticalLimit = percentageUsed >= 95;
-  const isOverBudget = currentSpent > budgetLimit;
+    percentageUsed >= warningThreshold && percentageUsed < CRITICAL_THRESHOLD;
 
   // Export report simulation
   const [exportMessage, setExportMessage] = useState("");
@@ -165,12 +192,30 @@ export function BudgetScreen() {
             />
           </div>
 
+          {(isCriticalLimit || isOverBudget) && (
+            <div
+              role="alert"
+              data-testid="budget-alert-banner"
+              className={`rounded-lg border px-3 py-2 text-[12px] font-medium ${
+                isOverBudget
+                  ? "border-error-dim bg-error-dim text-red"
+                  : "border-warning-dim bg-warning-dim text-warning"
+              }`}
+            >
+              {isOverBudget
+                ? `Budget exceeded: you have spent ${percentageUsed.toFixed(1)}% of your ${period} limit.`
+                : `Warning: you have spent ${percentageUsed.toFixed(1)}% of your ${period} limit.`}
+            </div>
+          )}
+
           <div className="flex justify-between items-center text-[12px] text-ink-2">
             <span>{percentageUsed.toFixed(1)}% of budget utilized</span>
             <div className="flex gap-2">
               {isOverBudget && <Badge variant="error">Limit Exceeded</Badge>}
-              {isCriticalLimit && !isOverBudget && (
-                <Badge variant="error">Critical (&gt;95%)</Badge>
+              {isCriticalLimit && (
+                <Badge variant="warning">
+                  Critical (&gt;{CRITICAL_THRESHOLD}%)
+                </Badge>
               )}
               {isApproachingLimit && (
                 <Badge variant="warning">
@@ -196,8 +241,17 @@ export function BudgetScreen() {
               <Input
                 label="Set Budget Limit ($)"
                 type="number"
-                value={budgetLimit}
-                onChange={(e) => setBudgetLimit(Number(e.target.value))}
+                min="0"
+                step="any"
+                value={budgetLimitInput}
+                error={budgetLimitError ?? undefined}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setBudgetLimitInput(raw);
+                  if (validateBudgetLimit(raw) === null) {
+                    setLastValidLimit(Number(raw));
+                  }
+                }}
               />
             </div>
 
@@ -209,7 +263,7 @@ export function BudgetScreen() {
               <input
                 type="range"
                 min="50"
-                max="95"
+                max={CRITICAL_THRESHOLD}
                 value={warningThreshold}
                 onChange={(e) => setWarningThreshold(Number(e.target.value))}
                 className="w-full accent-brand"
@@ -251,13 +305,17 @@ export function BudgetScreen() {
                 By Asset
               </p>
               <div className="space-y-2">
-                {assets.map((asset) => (
+                {assets.map((asset, index) => (
                   <div
                     key={asset.asset}
                     className="flex justify-between items-center text-[12px]"
                   >
                     <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-brand" />
+                      <span
+                        className="w-2.5 h-2.5 rounded-full"
+                        style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
+                        aria-hidden="true"
+                      />
                       <span className="font-medium text-ink">
                         {asset.asset}
                       </span>
@@ -276,12 +334,17 @@ export function BudgetScreen() {
                 By Transaction Type
               </p>
               <div className="space-y-2">
-                {txTypes.map((tx) => (
+                {txTypes.map((tx, index) => (
                   <div
                     key={tx.type}
                     className="flex justify-between items-center text-[12px]"
                   >
-                    <span className="text-ink-2">
+                    <span className="flex items-center gap-1.5 text-ink-2">
+                      <span
+                        className="w-2.5 h-2.5 rounded-sm"
+                        style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
+                        aria-hidden="true"
+                      />
                       {tx.type} ({tx.count} txs)
                     </span>
                     <strong className="text-ink">${tx.amount}</strong>
