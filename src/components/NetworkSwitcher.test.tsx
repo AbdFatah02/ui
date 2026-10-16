@@ -41,6 +41,15 @@ describe("NetworkSwitcher", { timeout: 15000 }, () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Custom RPC endpoints are health-checked before saving; stub a healthy node.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ result: { status: "healthy" } }),
+      }),
+    );
     switchNetwork = vi.fn().mockResolvedValue(undefined);
     addCustomNetwork = vi.fn().mockResolvedValue(undefined);
     resetTransactionWatchers = vi.fn();
