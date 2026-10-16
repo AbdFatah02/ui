@@ -276,6 +276,50 @@ describe("Sidebar", () => {
     });
   });
 
+  describe("issue #949 sidebar behavior", () => {
+    beforeEach(() => {
+      localStorage.setItem("sorokit-sidebar-collapsed", "true");
+    });
+
+    it("shows the collapsed navigation tooltip on pointer hover", async () => {
+      render(
+        <Sidebar active="wallet" onNavigate={onNavigate} open={false} onClose={onClose} />,
+      );
+      const transactions = screen.getByRole("button", { name: "Transactions" });
+
+      fireEvent.pointerMove(transactions, { pointerType: "mouse" });
+
+      expect(await screen.findByRole("tooltip")).toHaveTextContent("Transactions");
+    });
+
+    it("shows the collapsed navigation tooltip when focused by keyboard", async () => {
+      render(
+        <Sidebar active="wallet" onNavigate={onNavigate} open={false} onClose={onClose} />,
+      );
+      const transactions = screen.getByRole("button", { name: "Transactions" });
+
+      fireEvent.focus(transactions);
+
+      expect(await screen.findByRole("tooltip")).toHaveTextContent("Transactions");
+      expect(transactions).toHaveAttribute("aria-describedby");
+    });
+
+    it("highlights the Transactions item for a nested transaction route", () => {
+      render(
+        <Sidebar
+          active="/transactions/123"
+          onNavigate={onNavigate}
+          open={false}
+          onClose={onClose}
+        />,
+      );
+
+      const transactions = screen.getByRole("button", { name: "Transactions" });
+      expect(transactions).toHaveAttribute("aria-current", "page");
+      expect(transactions.className).toContain("bg-surface-3");
+    });
+  });
+
   describe("nav semantics and keyboard access (#550)", () => {
     const NAV_ITEMS = [
       "Wallet",
