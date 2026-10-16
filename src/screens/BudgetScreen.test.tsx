@@ -50,4 +50,40 @@ describe("BudgetScreen", () => {
     expect(screen.getByTestId("export-status")).toHaveTextContent(/Report exported as sorokit-spending-report.csv/i);
     vi.useRealTimers();
   });
+
+  it("blocks negative budget limits with an inline error", () => {
+    render(<BudgetScreen />);
+    const limitInput = screen.getByLabelText("Set Budget Limit ($)");
+    expect(limitInput).toHaveAttribute("min", "0");
+
+    fireEvent.change(limitInput, { target: { value: "-500" } });
+    expect(screen.getByText("Budget limit cannot be negative.")).toBeInTheDocument();
+    // Calculations keep using the last valid limit
+    expect(screen.getByText(/85\.3% of budget utilized/)).toBeInTheDocument();
+
+    fireEvent.change(limitInput, { target: { value: "0" } });
+    expect(screen.getByText("Budget limit must be greater than 0.")).toBeInTheDocument();
+
+    fireEvent.change(limitInput, { target: { value: "2000" } });
+    expect(screen.queryByText(/Budget limit (cannot|must)/)).not.toBeInTheDocument();
+    expect(screen.getByText(/64\.0% of budget utilized/)).toBeInTheDocument();
+  });
+
+  it("shows critical warning badge and banner above 90%", () => {
+    render(<BudgetScreen />);
+    const limitInput = screen.getByLabelText("Set Budget Limit ($)");
+    expect(screen.queryByTestId("budget-alert-banner")).not.toBeInTheDocument();
+
+    fireEvent.change(limitInput, { target: { value: "1400" } }); // 91.4%
+    expect(screen.getByText(/Critical/)).toBeInTheDocument();
+    expect(screen.getByTestId("budget-alert-banner")).toHaveTextContent(/Warning/);
+  });
+
+  it("shows limit exceeded badge and banner at 100%", () => {
+    render(<BudgetScreen />);
+    const limitInput = screen.getByLabelText("Set Budget Limit ($)");
+    fireEvent.change(limitInput, { target: { value: "1280" } }); // exactly 100%
+    expect(screen.getByText("Limit Exceeded")).toBeInTheDocument();
+    expect(screen.getByTestId("budget-alert-banner")).toHaveTextContent(/Budget exceeded/);
+  });
 });
