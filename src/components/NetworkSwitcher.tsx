@@ -9,7 +9,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Tooltip from "@radix-ui/react-tooltip";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import { useSorokit } from "@/context/useSorokit";
 import { useOutsideClick } from "@/hooks/useOutsideClick";
@@ -95,6 +95,80 @@ export function isValidHttpUrl(urlString: string): boolean {
   }
 }
 
+const RPC_HEALTH_TIMEOUT_MS = 5000;
+
+function isAbortError(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { name?: string }).name === "AbortError"
+  );
+}
+
+/**
+ * Pings a candidate Soroban RPC endpoint with a lightweight `getHealth` call.
+ * A successful JSON-RPC response also proves the endpoint's CORS headers allow
+ * this origin, since a blocked cross-origin request rejects `fetch` outright.
+ *
+ * Resolves when the node reports healthy and rejects with a user-facing
+ * message otherwise. Rejects with an `AbortError` if `signal` is aborted.
+ */
+export async function checkRpcHealth(
+  rpcUrl: string,
+  signal?: AbortSignal,
+  timeoutMs: number = RPC_HEALTH_TIMEOUT_MS,
+): Promise<void> {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  const onAbort = () => controller.abort();
+  if (signal?.aborted) controller.abort();
+  signal?.addEventListener("abort", onAbort, { once: true });
+
+  try {
+    const res = await fetch(rpcUrl.trim(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getHealth" }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`RPC endpoint responded with HTTP ${res.status}.`);
+    }
+    const body = (await res.json()) as {
+      result?: { status?: string };
+      error?: { message?: string };
+    };
+    if (body.error) {
+      throw new Error(
+        `RPC endpoint returned an error: ${body.error.message ?? "unknown error"}.`,
+      );
+    }
+    if (body.result?.status && body.result.status !== "healthy") {
+      throw new Error(`RPC endpoint reports status "${body.result.status}".`);
+    }
+  } catch (err) {
+    if (timedOut) {
+      throw new Error(
+        `RPC endpoint did not respond within ${Math.round(timeoutMs / 1000)}s.`,
+      );
+    }
+    if (isAbortError(err)) throw err;
+    if (err instanceof TypeError) {
+      throw new Error(
+        "Could not reach the RPC endpoint. It may be offline or may not allow requests from this origin (CORS).",
+      );
+    }
+    throw err instanceof Error ? err : new Error("RPC health check failed.");
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  }
+}
+
 export function NetworkSwitcher() {
   const {
     network,
@@ -112,6 +186,18 @@ export function NetworkSwitcher() {
   const [announcement, setAnnouncement] = useState("");
   const [isCustomDialogOpen, setIsCustomDialogOpen] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [isCheckingRpc, setIsCheckingRpc] = useState(false);
+
+  // Tracks the in-flight switch / health check so a newer one (or unmount)
+  // can cancel it and its late result is ignored instead of throwing.
+  const requestRef = useRef<AbortController | null>(null);
+  const beginRequest = useCallback(() => {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    return controller;
+  }, []);
+  useEffect(() => () => requestRef.current?.abort(), []);
 
   const menuRef = useOutsideClick<HTMLDivElement>(() => {
     setIsOpen(false);
@@ -145,6 +231,8 @@ export function NetworkSwitcher() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
+        requestRef.current?.abort();
+        setIsCheckingRpc(false);
         setIsCustomDialogOpen(false);
         setFormError("");
       }
@@ -179,17 +267,30 @@ export function NetworkSwitcher() {
     // another surface (e.g. NetworkScreen) blocks starting another one; the
     // provider's in-flight guard is the hard backstop.
     if (isOwnSwitching || isSwitchingNetworkProvider) return;
+    const controller = beginRequest();
     setIsOwnSwitching(true);
     try {
       resetTransactionWatchers?.();
       await switchNetwork(target);
+      if (controller.signal.aborted) return;
       const targetLabel =
         typeof target === "string"
           ? (STANDARD_NETWORKS.find((n) => n.name === target)?.label ?? target)
           : target.name;
       setAnnouncement(`Switched to ${targetLabel}`);
+    } catch (err: unknown) {
+      // A superseded or unmounted switch is not an error worth surfacing.
+      if (controller.signal.aborted || isAbortError(err)) return;
+      setAnnouncement(
+        err instanceof Error
+          ? `Failed to switch network: ${err.message}`
+          : "Failed to switch network",
+      );
     } finally {
-      setIsOwnSwitching(false);
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        setIsOwnSwitching(false);
+      }
     }
   };
 
@@ -253,6 +354,20 @@ export function NetworkSwitcher() {
       status: "online",
     };
 
+    const controller = beginRequest();
+    setIsCheckingRpc(true);
+    try {
+      await checkRpcHealth(newConfig.rpcUrl, controller.signal);
+    } catch (err: unknown) {
+      if (controller.signal.aborted || isAbortError(err)) return;
+      setFormError(
+        err instanceof Error ? err.message : "RPC health check failed.",
+      );
+      return;
+    } finally {
+      setIsCheckingRpc(false);
+    }
+
     setIsOwnSwitching(true);
     try {
       resetTransactionWatchers?.();
@@ -270,11 +385,15 @@ export function NetworkSwitcher() {
       setCustomPassphrase("");
       setFormError("");
     } catch (err: unknown) {
+      if (controller.signal.aborted || isAbortError(err)) return;
       setFormError(
         err instanceof Error ? err.message : "Failed to add custom network",
       );
     } finally {
-      setIsOwnSwitching(false);
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        setIsOwnSwitching(false);
+      }
     }
   };
 
@@ -610,6 +729,7 @@ export function NetworkSwitcher() {
         onOpenChange={(open) => {
           setIsCustomDialogOpen(open);
           if (!open) {
+            if (isCheckingRpc) requestRef.current?.abort();
             setFormError("");
           }
         }}
@@ -741,10 +861,10 @@ export function NetworkSwitcher() {
                 </Dialog.Close>
                 <button
                   type="submit"
-                  disabled={isSwitching}
+                  disabled={isSwitching || isCheckingRpc}
                   className="px-4 h-9 rounded-lg bg-brand text-[13px] font-medium text-white hover:bg-brand/90 transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  Add & Switch Network
+                  {isCheckingRpc ? "Testing RPC..." : "Add & Switch Network"}
                 </button>
               </div>
             </form>
