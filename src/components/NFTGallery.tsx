@@ -306,12 +306,12 @@ export function NFTCard({ nft, selected, bulkMode, onSelect, onSend, onList }: N
             {nft.metadata.attributes.slice(0, 3).map((attr) => (
               <span
                 key={attr.traitType}
-                title={attr.rarityPct !== undefined ? `${attr.rarityPct.toFixed(1)}% have this trait` : attr.traitType}
-                className="inline-flex items-center rounded-md bg-surface-2 border border-line px-1.5 py-0.5 text-[9px] text-ink-3"
+                title={`${attr.traitType}: ${attr.value}${attr.rarityPct !== undefined ? ` (${attr.rarityPct.toFixed(1)}% have this trait)` : ""}`}
+                className="inline-flex items-center max-w-full min-w-0 rounded-md bg-surface-2 border border-line px-1.5 py-0.5 text-[9px] text-ink-3"
               >
-                {attr.value}
+                <span className="truncate min-w-0">{attr.value}</span>
                 {attr.rarityPct !== undefined && (
-                  <span className="ml-1 text-brand font-semibold">{attr.rarityPct.toFixed(0)}%</span>
+                  <span className="ml-1 shrink-0 text-brand font-semibold">{attr.rarityPct.toFixed(0)}%</span>
                 )}
               </span>
             ))}
@@ -835,9 +835,9 @@ function NFTDetailDialog({ nft, open, onClose, onSend, onList }: NFTDetailDialog
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   {nft.metadata.attributes.map((attr) => (
-                    <div key={attr.traitType} className="rounded-lg border border-line bg-surface-2/50 px-3 py-2">
-                      <p className="text-[9px] font-semibold uppercase tracking-wider text-ink-4">{attr.traitType}</p>
-                      <p className="text-[12px] font-semibold text-ink mt-0.5">{attr.value}</p>
+                    <div key={attr.traitType} className="min-w-0 overflow-hidden rounded-lg border border-line bg-surface-2/50 px-3 py-2">
+                      <p className="text-[9px] font-semibold uppercase tracking-wider text-ink-4 break-words [overflow-wrap:anywhere]">{attr.traitType}</p>
+                      <p data-testid="nft-trait-value" className="text-[12px] font-semibold text-ink mt-0.5 break-words [overflow-wrap:anywhere]">{attr.value}</p>
                       {attr.rarityPct !== undefined && (
                         <p className="text-[10px] text-brand">{attr.rarityPct.toFixed(1)}% have this</p>
                       )}
