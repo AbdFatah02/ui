@@ -152,15 +152,19 @@ export async function checkRpcHealth(
     }
   } catch (err) {
     if (timedOut) {
-      throw new Error(
+      const error = new Error(
         `RPC endpoint did not respond within ${Math.round(timeoutMs / 1000)}s.`,
       );
+      (error as Error & { cause?: unknown }).cause = err;
+      throw error;
     }
     if (isAbortError(err)) throw err;
     if (err instanceof TypeError) {
-      throw new Error(
+      const error = new Error(
         "Could not reach the RPC endpoint. It may be offline or may not allow requests from this origin (CORS).",
       );
+      (error as Error & { cause?: unknown }).cause = err;
+      throw error;
     }
     throw err instanceof Error ? err : new Error("RPC health check failed.");
   } finally {
