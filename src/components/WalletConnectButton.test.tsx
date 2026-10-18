@@ -395,5 +395,102 @@ describe("WalletConnectButton", () => {
         "Connection rejected by user",
       );
     });
+
+    it("stops click event bubbling to parent containers when clicked in disconnected state (#887)", () => {
+      vi.mocked(useSorokit).mockReturnValue(
+        mockUseSorokit({
+          isConnected: false,
+        }),
+      );
+
+      const parentClick = vi.fn();
+      render(
+        <div onClick={parentClick}>
+          <WalletConnectButton />
+        </div>,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Connect Wallet" }));
+      expect(parentClick).not.toHaveBeenCalled();
+    });
+
+    it("stops click event bubbling to parent containers when clicked in connected state (#887)", () => {
+      vi.mocked(useSorokit).mockReturnValue(
+        mockUseSorokit({
+          isConnected: true,
+          address: "GABC1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        }),
+      );
+
+      const parentClick = vi.fn();
+      render(
+        <div onClick={parentClick}>
+          <WalletConnectButton />
+        </div>,
+      );
+
+      fireEvent.click(
+        screen.getByRole("button", { name: /wallet connected/i }),
+      );
+      expect(parentClick).not.toHaveBeenCalled();
+    });
+
+    it("stops click event bubbling when onOpenModal is provided (#887)", () => {
+      const mockOnOpen = vi.fn();
+      vi.mocked(useSorokit).mockReturnValue(
+        mockUseSorokit({
+          isConnected: true,
+          address: "GABC1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        }),
+      );
+
+      const parentClick = vi.fn();
+      render(
+        <div onClick={parentClick}>
+          <WalletConnectButton onOpenModal={mockOnOpen} />
+        </div>,
+      );
+
+      fireEvent.click(
+        screen.getByRole("button", { name: /wallet connected/i }),
+      );
+      expect(mockOnOpen).toHaveBeenCalledTimes(1);
+      expect(parentClick).not.toHaveBeenCalled();
+    });
+
+    it("has accessible attributes aria-haspopup='dialog' and aria-expanded when disconnected (#887)", () => {
+      vi.mocked(useSorokit).mockReturnValue(
+        mockUseSorokit({
+          isConnected: false,
+        }),
+      );
+
+      render(<WalletConnectButton />);
+      const btn = screen.getByRole("button", { name: "Connect Wallet" });
+      expect(btn).toHaveAttribute("aria-haspopup", "dialog");
+      expect(btn).toHaveAttribute("aria-expanded", "false");
+
+      fireEvent.click(btn);
+      expect(btn).toHaveAttribute("aria-expanded", "true");
+    });
+
+    it("renders compact address on mobile (<360px) and standard address on larger viewports (#887)", () => {
+      const fullAddr = "GABC1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      vi.mocked(useSorokit).mockReturnValue(
+        mockUseSorokit({
+          isConnected: true,
+          address: fullAddr,
+        }),
+      );
+
+      const { container } = render(<WalletConnectButton />);
+      const compactSpan = container.querySelector("[data-address-compact]");
+      const standardSpan = container.querySelector("[data-address]");
+
+      expect(compactSpan).toBeInTheDocument();
+      expect(compactSpan).toHaveTextContent("GAB...XYZ");
+      expect(standardSpan).toBeInTheDocument();
+      expect(standardSpan).toHaveTextContent("GABC12...WXYZ");
+    });
   });
 });
