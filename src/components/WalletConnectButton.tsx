@@ -94,8 +94,6 @@ export function WalletConnectButton({ onOpenModal }: WalletConnectButtonProps = 
           }}
           className="inline-flex items-center gap-1.5 sm:gap-2 h-8 px-2 sm:px-3.5 rounded-lg bg-surface-2 border border-line hover:border-line-2 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand max-w-full"
           aria-label={`Wallet connected: ${address}. Click to manage.`}
-          aria-haspopup="dialog"
-          aria-expanded={false}
         >
           <span className="w-2 h-2 rounded-full bg-green shrink-0" />
           <span
