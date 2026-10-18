@@ -68,8 +68,6 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       .join(" ") || undefined;
     const ariaInvalid = error ? true : ariaInvalidProp ?? false;
 
-    const [lastError, setLastError] = useState<string | undefined>(error);
-    const [lastHint, setLastHint] = useState<string | undefined>(hint);
     const [showPassword, setShowPassword] = useState(false);
 
     const isPassword = props.type === "password";
@@ -127,17 +125,6 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       }
     }, [onChange, props.readOnly, props.value]);
 
-    useEffect(() => {
-      if (error) {
-        setLastError(error);
-      }
-    }, [error]);
-
-    useEffect(() => {
-      if (hint) {
-        setLastHint(hint);
-      }
-    }, [hint]);
 
     return (
       <div className="flex flex-col gap-1.5">
@@ -256,7 +243,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               error ? "opacity-100" : "opacity-0 pointer-events-none",
             )}
           >
-            {error || lastError || ""}
+            {error || ""}
           </p>
           <p
             id={`${inputId}-hint`}
@@ -266,7 +253,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               !error && hint ? "opacity-100" : "opacity-0 pointer-events-none",
             )}
           >
-            {!error && hint ? hint : lastHint || ""}
+            {hint || ""}
           </p>
         </div>
       </div>
