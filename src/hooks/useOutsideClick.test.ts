@@ -76,9 +76,10 @@ describe("useOutsideClick", () => {
     rerender({ enabled: false });
 
     // Verify cleanup was called
-    expect(removeSpy).toHaveBeenCalledWith("pointerdown", expect.any(Function));
-    expect(removeSpy).toHaveBeenCalledWith("touchstart", expect.any(Function));
-    expect(removeSpy).toHaveBeenCalledWith("mousedown", expect.any(Function));
+    const expectedOptions = { capture: true, passive: true };
+    expect(removeSpy).toHaveBeenCalledWith("pointerdown", expect.any(Function), expectedOptions);
+    expect(removeSpy).toHaveBeenCalledWith("touchstart", expect.any(Function), expectedOptions);
+    expect(removeSpy).toHaveBeenCalledWith("mousedown", expect.any(Function), expectedOptions);
 
     // Verify handler is not called after disabled
     handler.mockClear();
